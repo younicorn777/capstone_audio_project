@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# VSCode
+.vscode/
+
+# Audio files
+*.wav
+*.mp3
+*.flac
+*.m4a
+
+# Dataset folders
+capstone_week9_dataset/
+
+# Results
+results/
+outputs/
