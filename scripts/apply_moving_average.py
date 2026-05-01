@@ -24,12 +24,12 @@ SR = 16000
 # 이동평균 window size
 # 숫자가 클수록 더 부드러워지지만, 음성이 먹먹해질 수 있음
 '''
-WINDOW_SIZE = 51  # 음성 보존 좋음, 느이즈 감소 약함
-WINDOW_SIZE = 101 # 균형
-WINDOW_SIZE = 201 # 노이즈 감소 증가, 음성 약간 먹먹
-WINDOW_SIZE = 401 # 강한 smoothing, 음성 왜곡
+WINDOW_SIZE = 11  # 음성 보존 좋음, 느이즈 감소 약함
+WINDOW_SIZE = 31  # 균형
+WINDOW_SIZE = 51  # 노이즈 감소 증가, 음성 약간 먹먹
+WINDOW_SIZE = 101 # 강한 smoothing, 음성 왜곡
 '''
-WINDOW_SIZE = 101
+WINDOW_SIZE = 31
 
 
 # =========================
