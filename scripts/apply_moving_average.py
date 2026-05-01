@@ -27,7 +27,7 @@ SR = 16000
 WINDOW_SIZE = 51  # 음성 보존 좋음, 느이즈 감소 약함
 WINDOW_SIZE = 101 # 균형
 WINDOW_SIZE = 201 # 노이즈 감소 증가, 음성 약간 먹먹
-WINDOW_SIZE = 401 # 강한 smoothing, 음성 왜곡 가능
+WINDOW_SIZE = 401 # 강한 smoothing, 음성 왜곡
 '''
 WINDOW_SIZE = 101
 
@@ -70,9 +70,11 @@ def moving_average_filter(audio, window_size):
         raise ValueError("window_size는 홀수로 설정하는 것을 권장합니다.")
 
     kernel = np.ones(window_size) / window_size
+    pad = window_size // 2
 
-    # mode='same'을 사용하면 입력과 출력 길이가 동일함
-    filtered = np.convolve(audio, kernel, mode="same")
+    padded_audio = np.pad(audio, pad_width = pad, mode = "reflect")
+
+    filtered = np.convolve(padded_audio, kernel, mode="valid")
 
     return filtered
 
@@ -101,7 +103,14 @@ def main():
         # 오디오 불러오기 -> 필터 적용 -> 정규화 -> 저장
         noisy_audio = load_audio(input_path)
         filtered_audio = moving_average_filter(noisy_audio, WINDOW_SIZE)
-        filtered_audio = normalize_audio(filtered_audio)
+        
+        # 이 코드는 나중에 필터링 결과를 비교할 때 어려움.
+        # filtered_audio = normalize_audio(filtered_audio)
+
+        # clipping 방지용: 1을 넘을 때만 줄임
+        max_val = np.max(np.abs(filtered_audio))
+        if max_val > 1:
+            filtered_audio = filtered_audio / max_val
 
         output_name = noisy_file.replace("noisy_", "ma_")
         output_path = os.path.join(RESULT_DIR, output_name)
