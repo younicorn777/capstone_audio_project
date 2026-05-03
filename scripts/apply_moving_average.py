@@ -29,7 +29,7 @@ WINDOW_SIZE = 23  # 균형
 WINDOW_SIZE = 51  # 노이즈 감소 증가, 음성 약간 먹먹
 WINDOW_SIZE = 101 # 강한 smoothing, 음성 왜곡
 '''
-WINDOW_SIZE = 23
+WINDOW_SIZE = 5
 
 
 # =========================
