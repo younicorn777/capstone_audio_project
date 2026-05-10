@@ -3,6 +3,7 @@ import csv
 import numpy as np
 import librosa
 import soundfile as sf
+from pystoi import stoi
 
 
 # =========================
@@ -27,6 +28,8 @@ BEST_CSV = os.path.join(RESULT_DIR, "spectral_subtraction_best_results.csv")
 SR = 16000
 N_FFT = 1024
 HOP_LENGTH = 256
+
+FRONT_NOISE_ONLY_SEC = 1.0
 
 
 # =========================
@@ -72,18 +75,22 @@ def align_length(a, b):
     return a[:min_len], b[:min_len]
 
 
+def zero_mean(signal):
+    return signal - np.mean(signal)
+
+
 # =========================
 # 4. 평가 지표
 # =========================
 
 def mse(clean, estimate):
     clean, estimate = align_length(clean, estimate)
-    return np.mean((clean - estimate) ** 2)
+    return float(np.mean((clean - estimate) ** 2))
 
 
 def mae(clean, estimate):
     clean, estimate = align_length(clean, estimate)
-    return np.mean(np.abs(clean - estimate))
+    return float(np.mean(np.abs(clean - estimate)))
 
 
 def snr_db(clean, estimate):
@@ -95,13 +102,68 @@ def snr_db(clean, estimate):
     if noise_power == 0:
         return float("inf")
 
-    return 10 * np.log10(signal_power / noise_power)
+    return float(10 * np.log10(signal_power / noise_power))
 
 
 def snr_improvement(clean, noisy, estimate):
     before = snr_db(clean, noisy)
     after = snr_db(clean, estimate)
-    return after - before
+    return float(after - before)
+
+
+def si_snr_db(clean, estimate, eps=1e-8):
+    """
+    Scale-Invariant Signal-to-Noise Ratio 계산
+
+    clean:
+        기준 clean voice
+
+    estimate:
+        필터링된 음성
+
+    특징:
+        출력 음성의 전체 음량 차이를 보정한 뒤,
+        clean voice 방향 성분과 오차 성분의 비율을 계산
+    """
+    clean, estimate = align_length(clean, estimate)
+
+    clean = zero_mean(clean)
+    estimate = zero_mean(estimate)
+
+    clean_energy = np.sum(clean ** 2) + eps
+
+    # estimate를 clean 방향으로 projection
+    target = (np.sum(estimate * clean) / clean_energy) * clean
+
+    # clean 방향으로 설명되지 않는 성분 = noise/error
+    noise = estimate - target
+
+    target_power = np.sum(target ** 2)
+    noise_power = np.sum(noise ** 2) + eps
+
+    return float(10 * np.log10((target_power + eps) / noise_power))
+
+
+def si_snr_improvement(clean, noisy, estimate):
+    before = si_snr_db(clean, noisy)
+    after = si_snr_db(clean, estimate)
+    return float(after - before)
+
+
+def stoi_score(clean, estimate):
+    """
+    STOI 계산
+    - 0~1 범위
+    - 1에 가까울수록 음성 명료도가 좋음
+    """
+    clean, estimate = align_length(clean, estimate)
+
+    try:
+        score = stoi(clean, estimate, SR, extended=False)
+        return float(score)
+    except Exception as e:
+        print(f"[경고] STOI 계산 실패: {e}")
+        return np.nan
 
 
 # =========================
@@ -119,13 +181,6 @@ def get_clean_file_from_noisy_vad(noisy_file):
     clean_number = parts[2].replace("clean", "")
 
     return f"clean_{clean_number}.wav"
-
-
-def get_short_name(noisy_file):
-    """
-    noisy_vad_clean01_air.wav -> clean01_air
-    """
-    return noisy_file.replace("noisy_vad_", "").replace(".wav", "")
 
 
 # =========================
@@ -235,6 +290,7 @@ def spectral_subtraction(noisy_audio, noise_profile, alpha, beta):
 
 def main():
     print("Spectral Subtraction alpha/beta Grid Search 시작")
+    print("Best 기준: SI-SNR Improvement 최대")
     print("-" * 70)
 
     if not os.path.exists(VAD_CSV):
@@ -250,6 +306,8 @@ def main():
 
     all_results = []
     best_results = []
+
+    front_len = int(FRONT_NOISE_ONLY_SEC * SR)
 
     for noisy_file in noisy_files:
         if noisy_file not in vad_dict:
@@ -268,12 +326,10 @@ def main():
         clean = load_audio(clean_path)
         noisy = load_audio(noisy_path)
 
-        # noisy_vad는 앞/뒤 noise-only 구간이 있어서 clean과 길이가 다름
-        # 평가할 때는 speech가 들어간 중간 구간과 clean을 비교해야 함
-        # 현재 생성 기준: 앞 1초 noise-only, 뒤 0.5초 noise-only
-        front_len = int(1.0 * SR)
         clean_len = len(clean)
 
+        # noisy_vad는 앞/뒤 noise-only 구간이 있어서 clean과 길이가 다름
+        # 평가는 clean voice와 대응되는 중간 구간만 사용
         noisy_middle = noisy[front_len:front_len + clean_len]
 
         non_speech_segments = vad_dict[noisy_file]["non_speech"]
@@ -293,6 +349,8 @@ def main():
         noisy_mse = mse(clean, noisy_middle)
         noisy_mae = mae(clean, noisy_middle)
         noisy_snr = snr_db(clean, noisy_middle)
+        noisy_si_snr = si_snr_db(clean, noisy_middle)
+        noisy_stoi = stoi_score(clean, noisy_middle)
 
         best_row = None
         best_audio = None
@@ -313,28 +371,58 @@ def main():
                 current_mse = mse(clean, enhanced_middle)
                 current_mae = mae(clean, enhanced_middle)
                 current_snr = snr_db(clean, enhanced_middle)
-                current_improvement = current_snr - noisy_snr
+                current_snr_improvement = current_snr - noisy_snr
+
+                current_si_snr = si_snr_db(clean, enhanced_middle)
+                current_si_snr_improvement = current_si_snr - noisy_si_snr
+
+                current_stoi = stoi_score(clean, enhanced_middle)
 
                 row = {
                     "file": noisy_file.replace(".wav", ""),
                     "clean_file": clean_file,
                     "alpha": alpha,
                     "beta": beta,
+
                     "MSE": current_mse,
                     "MAE": current_mae,
                     "SNR_dB": current_snr,
-                    "SNR_Improvement_dB": current_improvement,
+                    "SNR_Improvement_dB": current_snr_improvement,
+
+                    "SI_SNR_dB": current_si_snr,
+                    "SI_SNR_Improvement_dB": current_si_snr_improvement,
+                    "STOI": current_stoi,
+
                     "Noisy_MSE": noisy_mse,
                     "Noisy_MAE": noisy_mae,
                     "Noisy_SNR_dB": noisy_snr,
+                    "Noisy_SI_SNR_dB": noisy_si_snr,
+                    "Noisy_STOI": noisy_stoi,
                 }
 
                 all_results.append(row)
 
-                # 1차 기준: MSE 최소
-                if best_row is None or current_mse < best_row["MSE"]:
+                # Best 선택 기준:
+                # 1순위: SI-SNR Improvement 최대
+                # 2순위: STOI 최대
+                # 3순위: MSE 최소
+                if best_row is None:
                     best_row = row
                     best_audio = enhanced_full
+                else:
+                    better = False
+
+                    if row["SI_SNR_Improvement_dB"] > best_row["SI_SNR_Improvement_dB"]:
+                        better = True
+                    elif row["SI_SNR_Improvement_dB"] == best_row["SI_SNR_Improvement_dB"]:
+                        if row["STOI"] > best_row["STOI"]:
+                            better = True
+                        elif row["STOI"] == best_row["STOI"] and row["MSE"] < best_row["MSE"]:
+                            better = True
+
+                    if better:
+                        best_row = row
+                        best_audio = enhanced_full
 
         best_results.append(best_row)
 
@@ -346,10 +434,10 @@ def main():
         print(
             f"[Best] {noisy_file} | "
             f"alpha={best_row['alpha']}, beta={best_row['beta']}, "
-            f"MSE={best_row['MSE']:.6f}, "
-            f"MAE={best_row['MAE']:.6f}, "
-            f"SNR={best_row['SNR_dB']:.2f} dB, "
-            f"Improvement={best_row['SNR_Improvement_dB']:.2f} dB"
+            f"SI-SNRi={best_row['SI_SNR_Improvement_dB']:.2f} dB, "
+            f"STOI={best_row['STOI']:.4f}, "
+            f"SNRi={best_row['SNR_Improvement_dB']:.2f} dB, "
+            f"MSE={best_row['MSE']:.6f}"
         )
 
     fieldnames = [
@@ -357,13 +445,21 @@ def main():
         "clean_file",
         "alpha",
         "beta",
+
         "MSE",
         "MAE",
         "SNR_dB",
         "SNR_Improvement_dB",
+
+        "SI_SNR_dB",
+        "SI_SNR_Improvement_dB",
+        "STOI",
+
         "Noisy_MSE",
         "Noisy_MAE",
         "Noisy_SNR_dB",
+        "Noisy_SI_SNR_dB",
+        "Noisy_STOI",
     ]
 
     with open(OUTPUT_CSV, "w", newline="", encoding="utf-8-sig") as f:
