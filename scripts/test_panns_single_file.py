@@ -52,7 +52,14 @@ def main():
     print(f"테스트 파일: {TEST_WAV}")
 
     print("PANNs AudioTagging 모델 로딩 중...")
-    at = AudioTagging(checkpoint_path=None, device="cpu")
+    
+    checkpoint_path = os.path.join(
+    os.path.expanduser("~"),
+    "panns_data",
+    "Cnn14_mAP=0.431.pth"
+    )
+
+    at = AudioTagging(checkpoint_path=checkpoint_path, device="cpu")
 
     audio = load_audio(TEST_WAV)
 
