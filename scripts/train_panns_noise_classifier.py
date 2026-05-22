@@ -1,5 +1,6 @@
 import os
 import json
+import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -34,6 +35,12 @@ PLOT_DIR = os.path.join(RESULT_DIR, "plots")
 
 os.makedirs(RESULT_DIR, exist_ok=True)
 os.makedirs(PLOT_DIR, exist_ok=True)
+
+MODEL_DIR = os.path.join(BASE_DIR, "models")
+os.makedirs(MODEL_DIR, exist_ok=True)
+
+XGBOOST_MODEL_PATH = os.path.join(MODEL_DIR, "panns_xgboost.pkl")
+LABEL_ENCODER_PATH = os.path.join(MODEL_DIR, "label_encoder.pkl")
 
 SUMMARY_CSV = os.path.join(RESULT_DIR, "panns_classification_summary.csv")
 DETAIL_JSON = os.path.join(RESULT_DIR, "panns_classification_report.json")
@@ -264,6 +271,15 @@ def main():
         summary_rows.append(summary_row)
         detail_results[f"PANNs + {model_name}"] = detail
 
+        # Streamlit에서 사용할 최종 모델 저장
+        if model_name == "XGBoost":
+            joblib.dump(model, XGBOOST_MODEL_PATH)
+            joblib.dump(label_encoder, LABEL_ENCODER_PATH)
+
+            print(f"\n[모델 저장 완료]")
+            print(f"XGBoost model: {XGBOOST_MODEL_PATH}")
+            print(f"Label encoder: {LABEL_ENCODER_PATH}")
+    
     # =========================
     # 8. 결과 저장
     # =========================
