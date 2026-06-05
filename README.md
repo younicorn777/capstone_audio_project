@@ -145,7 +145,7 @@ Input Audio (.wav)
 .
 ├── app.py
 ├── README.md
-├── capstone_week9_dataset/   (gitignored - large dataset, not pushed to repo)
+├── capstone_week9_dataset/ (gitignored - large dataset, not pushed to repo)
 │   ├── clean/
 │   ├── external_noise_dataset_verified/
 │   │   ├── air/
@@ -168,11 +168,8 @@ Input Audio (.wav)
 │   ├── apply_moving_average.py
 │   └── evaluate_filters.py
 ├── temp_streamlit/
-└── results/                  (gitignored - generated outputs, not pushed)
+└── results/ (gitignored - generated outputs, not pushed)
 ```
-
-Note:
-- Audio files (`*.wav`, `*.mp3`, etc.), the `capstone_week9_dataset/` folder, and `results/` are included in `.gitignore` and typically not pushed to GitHub to avoid large files.
 
 ---
 
